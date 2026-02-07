@@ -592,6 +592,40 @@
     .color-swatch.empty {
       background: var(--border);
     }
+
+    /* Step 4 — Processed frames */
+    .step4-section {
+      display: none;
+      margin-top: 2rem;
+    }
+
+    .step4-section.visible {
+      display: block;
+    }
+
+    .processed-frames-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .processed-frames-nav button {
+      padding: 0.35rem 0.9rem;
+      font-size: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .processed-frames-nav button:hover {
+      background: rgba(88, 166, 255, 0.15);
+      border-color: var(--accent);
+    }
   </style>
 </head>
 <body>
@@ -775,6 +809,40 @@
         </div>
       </div>
     </div>
+
+    <div class="step4-section" id="step4Section">
+      <span class="step-badge">Step 4 — Processed frames</span>
+      <h2 style="font-size:1.25rem; margin-bottom:0.5rem;">Process & browse all frames</h2>
+      <p class="subtitle" style="margin-bottom:1rem;">Apply chroma key to all sampled frames and browse the results.</p>
+      <div class="row" style="margin-bottom:1rem">
+        <button type="button" id="processAllFramesBtn" class="change-btn">Process all frames</button>
+        <span class="looped-preview-info" id="processStatus"></span>
+      </div>
+      <div class="frame-preview-card" id="step4BrowserCard" style="display:none">
+        <div class="label">Processed frames · Wheel zoom · Drag to pan</div>
+        <div class="processed-frames-nav">
+          <button type="button" id="processedFramePrev">←</button>
+          <span class="fps-value" id="processedFrameInfo">1 / 1</span>
+          <button type="button" id="processedFrameNext">→</button>
+        </div>
+        <div class="chroma-viewport chroma-preview-box step4-viewport" id="step4Viewport">
+          <div class="chroma-viewport-inner" id="step4ViewportInner">
+            <img id="step4FrameImg" alt="" style="display:block;width:100%;height:100%;object-fit:contain;">
+          </div>
+        </div>
+        <div class="chroma-zoom-controls">
+          <button type="button" id="step4ZoomOut">−</button>
+          <span class="fps-value" id="step4ZoomVal">100%</span>
+          <button type="button" id="step4ZoomIn">+</button>
+        </div>
+        <div class="chroma-preview-bg-options">
+          <label><input type="radio" name="step4PreviewBg" value="transparent" checked> Transparent</label>
+          <label><input type="radio" name="step4PreviewBg" value="black"> Black</label>
+          <label><input type="radio" name="step4PreviewBg" value="white"> White</label>
+          <label><input type="radio" name="step4PreviewBg" value="gray"> Gray</label>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -888,8 +956,11 @@
       videoPreview.src = '';
       frameCache.forEach(url => URL.revokeObjectURL(url));
       frameCache = [];
+      (processedFrameCache || []).forEach(url => URL.revokeObjectURL(url));
+      processedFrameCache = [];
       step2Section.classList.remove('visible');
       step3Section.classList.remove('visible');
+      step4Section.classList.remove('visible');
       showUpload();
       fileInput.click();
     });
@@ -1344,12 +1415,113 @@
       loadChromaFrame();
     }
 
+    const step4Section = document.getElementById('step4Section');
+
     function initStep3() {
       step3Section.classList.add('visible');
+      step4Section.classList.add('visible');
       chromaToleranceVal.textContent = chromaToleranceInput.value;
       document.getElementById('chromaMaxClustersVal').textContent = 
         parseInt(document.getElementById('chromaMaxClusters').value, 10) === 0 ? '∞' : document.getElementById('chromaMaxClusters').value;
       loadChromaFrame();
+    }
+
+    function processFrameToData(img, w, h) {
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+      if (chromaPickedColor === null) return null;
+      const kr = chromaPickedColor.r, kg = chromaPickedColor.g, kb = chromaPickedColor.b;
+      const tol = parseInt(chromaToleranceInput.value, 10) || 30;
+      const threshold = (tol / 100) * 442;
+      for (let i = 0; i < data.length; i += 4) {
+        const dr = data[i] - kr, dg = data[i + 1] - kg, db = data[i + 2] - kb;
+        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+        if (dist <= threshold) data[i + 3] = 0;
+      }
+      if (document.getElementById('holoRemoverEnabled').checked) {
+        applyDespill(data, kr, kg, kb, parseInt(document.getElementById('holoRemoverStrength').value, 10) || 80);
+      }
+      const maxClusters = parseInt(document.getElementById('chromaMaxClusters').value, 10) || 0;
+      if (maxClusters > 0) applyClusterFilter(data, w, h, maxClusters);
+      ctx.putImageData(imgData, 0, 0);
+      return canvas;
+    }
+
+    let processedFrameCache = [];
+    let processedFrameIdx = 0;
+
+    async function processAllFrames() {
+      if (chromaPickedColor === null) {
+        document.getElementById('processStatus').textContent = 'Pick a color first.';
+        return;
+      }
+      const indices = getSampledIndices();
+      if (indices.length === 0 || frameCache.length === 0) {
+        document.getElementById('processStatus').textContent = 'No frames to process.';
+        return;
+      }
+      const statusEl = document.getElementById('processStatus');
+      const btn = document.getElementById('processAllFramesBtn');
+      btn.disabled = true;
+      processedFrameCache.forEach(url => URL.revokeObjectURL(url));
+      processedFrameCache = [];
+      const w = chromaPickerCanvas.width, h = chromaPickerCanvas.height;
+      for (let i = 0; i < indices.length; i++) {
+        statusEl.textContent = `Processing frame ${i + 1} / ${indices.length}…`;
+        await new Promise(r => setTimeout(r, 0));
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = frameCache[indices[i]];
+        });
+        const canvas = processFrameToData(img, w, h);
+        if (!canvas) continue;
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        processedFrameCache.push(URL.createObjectURL(blob));
+      }
+      processedFrameIdx = 0;
+      statusEl.textContent = `Done. ${processedFrameCache.length} frames processed.`;
+      btn.disabled = false;
+      document.getElementById('step4BrowserCard').style.display = 'block';
+      initStep4Viewport();
+      showProcessedFrame(0);
+    }
+
+    const step4ViewportEl = document.getElementById('step4Viewport');
+    const step4ViewportInner = document.getElementById('step4ViewportInner');
+    const step4ViewportState = { scale: 100, offsetX: 0, offsetY: 0 };
+    let step4Viewport = null;
+
+    function initStep4Viewport() {
+      if (step4Viewport) return;
+      const dimCanvas = document.createElement('canvas');
+      dimCanvas.width = chromaPickerCanvas.width;
+      dimCanvas.height = chromaPickerCanvas.height;
+      step4ViewportInner.style.width = dimCanvas.width + 'px';
+      step4ViewportInner.style.height = dimCanvas.height + 'px';
+      step4Viewport = initViewport(
+        step4ViewportEl,
+        step4ViewportInner,
+        dimCanvas,
+        document.getElementById('step4ZoomVal'),
+        step4ViewportState,
+        null
+      );
+    }
+
+    function showProcessedFrame(idx) {
+      if (processedFrameCache.length === 0) return;
+      processedFrameIdx = ((idx % processedFrameCache.length) + processedFrameCache.length) % processedFrameCache.length;
+      const img = document.getElementById('step4FrameImg');
+      img.src = processedFrameCache[processedFrameIdx];
+      document.getElementById('processedFrameInfo').textContent = `${processedFrameIdx + 1} / ${processedFrameCache.length}`;
+      if (step4Viewport) step4Viewport.centerContent();
     }
 
     const chromaPickerZoomVal = document.getElementById('chromaPickerZoomVal');
@@ -1412,6 +1584,25 @@
       const v = parseInt(e.target.value, 10);
       document.getElementById('chromaMaxClustersVal').textContent = v === 0 ? '∞' : v;
       applyChromaPreview();
+    });
+    document.getElementById('processAllFramesBtn').addEventListener('click', processAllFrames);
+    document.getElementById('processedFramePrev').addEventListener('click', () => showProcessedFrame(processedFrameIdx - 1));
+    document.getElementById('processedFrameNext').addEventListener('click', () => showProcessedFrame(processedFrameIdx + 1));
+    document.getElementById('step4ZoomIn').addEventListener('click', () => {
+      if (!step4Viewport) return;
+      const rect = step4ViewportEl.getBoundingClientRect();
+      step4Viewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.25);
+    });
+    document.getElementById('step4ZoomOut').addEventListener('click', () => {
+      if (!step4Viewport) return;
+      const rect = step4ViewportEl.getBoundingClientRect();
+      step4Viewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 0.8);
+    });
+    document.querySelectorAll('input[name="step4PreviewBg"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        step4ViewportEl.classList.remove('bg-black', 'bg-white', 'bg-gray');
+        if (e.target.value !== 'transparent') step4ViewportEl.classList.add('bg-' + e.target.value);
+      });
     });
 
     firstFrameSlider.addEventListener('input', updateFirstFrame);
