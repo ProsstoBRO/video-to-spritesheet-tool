@@ -24,3 +24,6 @@ temp/
 # OS
 .DS_Store
 Thumbs.db
+
+# other
+video-to-spritesheet-tool.md
