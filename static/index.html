@@ -538,6 +538,14 @@
             <span class="looped-preview-info">N =</span>
             <input type="number" id="samplingN" min="2" max="100" value="2">
           </div>
+          <label class="sampling-option">
+            <input type="radio" name="sampling" value="targetFps" id="samplingTargetFps">
+            Target FPS
+          </label>
+          <div class="sampling-n-input" id="samplingTargetFpsRow" style="display:none">
+            <span class="looped-preview-info">FPS</span>
+            <input type="number" id="samplingTargetFpsVal" min="5" max="60" value="12" placeholder="12">
+          </div>
         </div>
       </div>
 
@@ -690,6 +698,7 @@
 
     let videoId = null;
     let frameCache = []; // blob URLs for each frame
+    let videoFps = 30; // original video FPS from metadata
     let loopedPreviewInterval = null;
 
     function setPreviewFromCache(boxEl, index) {
@@ -759,9 +768,18 @@
       const last = parseInt(lastFrameSlider.value, 10);
       const indices = [];
       if (first > last) return indices;
+      const rangeCount = last - first + 1;
       const useEveryN = document.getElementById('samplingEveryN').checked;
-      const n = Math.max(2, parseInt(document.getElementById('samplingN').value, 10) || 2);
-      if (useEveryN) {
+      const useTargetFps = document.getElementById('samplingTargetFps').checked;
+      if (useTargetFps) {
+        const targetFps = Math.max(5, Math.min(60, parseInt(document.getElementById('samplingTargetFpsVal').value, 10) || 12));
+        const targetCount = Math.max(1, Math.round(rangeCount * targetFps / videoFps));
+        for (let i = 0; i < targetCount; i++) {
+          const idx = first + Math.round(i * (last - first) / Math.max(1, targetCount - 1));
+          indices.push(Math.min(idx, last));
+        }
+      } else if (useEveryN) {
+        const n = Math.max(2, parseInt(document.getElementById('samplingN').value, 10) || 2);
         for (let i = first; i <= last; i += n) indices.push(i);
       } else {
         for (let i = first; i <= last; i++) indices.push(i);
@@ -843,7 +861,9 @@
         overlayPlaceholder.style.display = 'none';
         overlayBg.src = frameCache[safeMaxIdx];
         overlayFg.src = frameCache[0];
+        videoFps = meta.fps || 30;
         document.getElementById('samplingNRow').style.display = document.getElementById('samplingEveryN').checked ? 'flex' : 'none';
+        document.getElementById('samplingTargetFpsRow').style.display = document.getElementById('samplingTargetFps').checked ? 'flex' : 'none';
         document.getElementById('loopedPreviewFpsVal').textContent = document.getElementById('loopedPreviewFps').value;
         startLoopedPreview();
       } catch (e) {
@@ -858,14 +878,23 @@
 
     document.getElementById('samplingAll').addEventListener('change', () => {
       document.getElementById('samplingNRow').style.display = 'none';
+      document.getElementById('samplingTargetFpsRow').style.display = 'none';
       updateLoopedPreview();
     });
     document.getElementById('samplingEveryN').addEventListener('change', () => {
       document.getElementById('samplingNRow').style.display = 'flex';
+      document.getElementById('samplingTargetFpsRow').style.display = 'none';
+      updateLoopedPreview();
+    });
+    document.getElementById('samplingTargetFps').addEventListener('change', () => {
+      document.getElementById('samplingNRow').style.display = 'none';
+      document.getElementById('samplingTargetFpsRow').style.display = 'flex';
       updateLoopedPreview();
     });
     document.getElementById('samplingN').addEventListener('input', updateLoopedPreview);
     document.getElementById('samplingN').addEventListener('change', updateLoopedPreview);
+    document.getElementById('samplingTargetFpsVal').addEventListener('input', updateLoopedPreview);
+    document.getElementById('samplingTargetFpsVal').addEventListener('change', updateLoopedPreview);
     document.getElementById('loopedPreviewFps').addEventListener('input', (e) => {
       document.getElementById('loopedPreviewFpsVal').textContent = e.target.value;
       updateLoopedPreview();
