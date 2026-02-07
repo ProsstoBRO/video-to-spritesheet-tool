@@ -452,6 +452,88 @@
       font-size: 0.8rem;
       color: var(--text-muted);
     }
+
+    /* Step 3 — Chroma key */
+    .step3-section {
+      display: none;
+      margin-top: 2rem;
+    }
+
+    .step3-section.visible {
+      display: block;
+    }
+
+    .chroma-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 700px) {
+      .chroma-grid { grid-template-columns: 1fr; }
+    }
+
+    .chroma-picker-box {
+      cursor: crosshair;
+      position: relative;
+      background: #000;
+      aspect-ratio: 16 / 9;
+      min-height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .chroma-picker-box canvas,
+    .chroma-preview-box canvas {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      display: block;
+    }
+
+    .chroma-preview-box {
+      background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px;
+      aspect-ratio: 16 / 9;
+      min-height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .chroma-controls {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .chroma-controls .row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+    }
+
+    .chroma-controls .row:last-child { margin-bottom: 0; }
+
+    .color-swatch {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .color-swatch.empty {
+      background: var(--border);
+    }
   </style>
 </head>
 <body>
@@ -560,6 +642,40 @@
           <input type="range" id="loopedPreviewFps" min="5" max="60" value="24">
           <span class="fps-value" id="loopedPreviewFpsVal">24</span>
           <span class="looped-preview-info" id="loopedPreviewInfo">— frames</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step3-section" id="step3Section">
+      <span class="step-badge">Step 3 — Chroma key</span>
+      <h2 style="font-size:1.25rem; margin-bottom:0.5rem;">Pick color & remove background</h2>
+      <p class="subtitle" style="margin-bottom:1rem;">Click on the first frame to pick the background color. Adjust tolerance to fine-tune removal.</p>
+      <div class="chroma-grid">
+        <div class="frame-preview-card">
+          <div class="label">Click to pick color</div>
+          <div class="chroma-picker-box" id="chromaPickerBox">
+            <canvas id="chromaPickerCanvas"></canvas>
+          </div>
+        </div>
+        <div class="frame-preview-card">
+          <div class="label">Result preview</div>
+          <div class="chroma-preview-box" id="chromaPreviewBox">
+            <canvas id="chromaPreviewCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="chroma-controls">
+        <div class="row">
+          <div class="color-swatch empty" id="pickedColorSwatch"></div>
+          <div>
+            <span class="looped-preview-info">Picked color:</span>
+            <span id="pickedColorText" style="font-family:'JetBrains Mono',monospace; font-size:0.9rem;">—</span>
+          </div>
+        </div>
+        <div class="row">
+          <label class="looped-preview-info">Tolerance:</label>
+          <input type="range" id="chromaTolerance" min="0" max="100" value="30">
+          <span class="fps-value" id="chromaToleranceVal">30</span>
         </div>
       </div>
     </div>
@@ -677,6 +793,7 @@
       frameCache.forEach(url => URL.revokeObjectURL(url));
       frameCache = [];
       step2Section.classList.remove('visible');
+      step3Section.classList.remove('visible');
       showUpload();
       fileInput.click();
     });
@@ -696,10 +813,21 @@
     const overlayFg = document.getElementById('overlayFg');
     const overlayPlaceholder = document.getElementById('overlayPlaceholder');
 
+    const step3Section = document.getElementById('step3Section');
+    const chromaPickerCanvas = document.getElementById('chromaPickerCanvas');
+    const chromaPreviewCanvas = document.getElementById('chromaPreviewCanvas');
+    const chromaPickerBox = document.getElementById('chromaPickerBox');
+    const pickedColorSwatch = document.getElementById('pickedColorSwatch');
+    const pickedColorText = document.getElementById('pickedColorText');
+    const chromaToleranceInput = document.getElementById('chromaTolerance');
+    const chromaToleranceVal = document.getElementById('chromaToleranceVal');
+
     let videoId = null;
     let frameCache = []; // blob URLs for each frame
     let videoFps = 30; // original video FPS from metadata
     let loopedPreviewInterval = null;
+    let chromaPickedColor = null; // { r, g, b }
+    let chromaSourceImg = null;   // loaded Image for first frame
 
     function setPreviewFromCache(boxEl, index) {
       if (index < 0 || index >= frameCache.length) return;
@@ -727,6 +855,7 @@
       updateRangeSummary();
       updateOverlay();
       updateLoopedPreview();
+      updateChromaPicker();
     }
 
     function updateLastFrame() {
@@ -866,12 +995,92 @@
         document.getElementById('samplingTargetFpsRow').style.display = document.getElementById('samplingTargetFps').checked ? 'flex' : 'none';
         document.getElementById('loopedPreviewFpsVal').textContent = document.getElementById('loopedPreviewFps').value;
         startLoopedPreview();
+        initStep3();
       } catch (e) {
         summaryEl.innerHTML = 'Could not load frames: ' + (e.message || 'Unknown error');
         firstFrameBox.innerHTML = '<span class="placeholder">Error</span>';
         lastFrameBox.innerHTML = '<span class="placeholder">Error</span>';
       }
     }
+
+    function loadChromaFrame() {
+      const indices = getSampledIndices();
+      if (indices.length === 0 || frameCache.length === 0) return;
+      const firstIdx = indices[0];
+      const img = new Image();
+      img.onload = () => {
+        chromaSourceImg = img;
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        chromaPickerCanvas.width = w;
+        chromaPickerCanvas.height = h;
+        chromaPreviewCanvas.width = w;
+        chromaPreviewCanvas.height = h;
+        const ctx = chromaPickerCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        chromaPickedColor = null;
+        pickedColorSwatch.classList.add('empty');
+        pickedColorSwatch.style.backgroundColor = '';
+        pickedColorText.textContent = '— click to pick';
+        applyChromaPreview();
+      };
+      img.src = frameCache[firstIdx];
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    function applyChromaPreview() {
+      if (!chromaSourceImg) return;
+      const ctx = chromaPreviewCanvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(chromaSourceImg, 0, 0);
+      if (chromaPickedColor === null) return;
+      const imgData = ctx.getImageData(0, 0, chromaPreviewCanvas.width, chromaPreviewCanvas.height);
+      const data = imgData.data;
+      const kr = chromaPickedColor.r, kg = chromaPickedColor.g, kb = chromaPickedColor.b;
+      const tol = parseInt(chromaToleranceInput.value, 10) || 30;
+      const threshold = (tol / 100) * 442;
+      for (let i = 0; i < data.length; i += 4) {
+        const dr = data[i] - kr, dg = data[i + 1] - kg, db = data[i + 2] - kb;
+        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+        if (dist <= threshold) data[i + 3] = 0;
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    function onChromaPickerClick(e) {
+      if (!chromaSourceImg || frameCache.length === 0) return;
+      const rect = chromaPickerCanvas.getBoundingClientRect();
+      const scaleX = chromaPickerCanvas.width / rect.width;
+      const scaleY = chromaPickerCanvas.height / rect.height;
+      const x = Math.floor((e.clientX - rect.left) * scaleX);
+      const y = Math.floor((e.clientY - rect.top) * scaleY);
+      const ctx = chromaPickerCanvas.getContext('2d', { willReadFrequently: true });
+      const pixel = ctx.getImageData(x, y, 1, 1).data;
+      chromaPickedColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
+      pickedColorSwatch.classList.remove('empty');
+      pickedColorSwatch.style.backgroundColor = rgbToHex(pixel[0], pixel[1], pixel[2]);
+      pickedColorText.textContent = rgbToHex(pixel[0], pixel[1], pixel[2]) + ' rgb(' + pixel[0] + ',' + pixel[1] + ',' + pixel[2] + ')';
+      applyChromaPreview();
+    }
+
+    function updateChromaPicker() {
+      if (!step3Section.classList.contains('visible')) return;
+      loadChromaFrame();
+    }
+
+    function initStep3() {
+      step3Section.classList.add('visible');
+      chromaToleranceVal.textContent = chromaToleranceInput.value;
+      loadChromaFrame();
+    }
+
+    chromaPickerBox.addEventListener('click', onChromaPickerClick);
+    chromaToleranceInput.addEventListener('input', () => {
+      chromaToleranceVal.textContent = chromaToleranceInput.value;
+      applyChromaPreview();
+    });
 
     firstFrameSlider.addEventListener('input', updateFirstFrame);
     lastFrameSlider.addEventListener('input', updateLastFrame);
