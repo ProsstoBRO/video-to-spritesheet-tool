@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video to Sprite Sheet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79b8ff;
+      --success: #3fb950;
+      --error: #f85149;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Outfit', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+
+    .step-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      background: rgba(88, 166, 255, 0.15);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
+      background: var(--surface);
+      transition: border-color 0.2s, background 0.2s;
+      cursor: pointer;
+      position: relative;
+      margin-bottom: 1.5rem;
+    }
+
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(88, 166, 255, 0.06);
+    }
+
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .upload-zone .icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.7;
+    }
+
+    .upload-zone .hint {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .upload-zone .formats {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-top: 0.25rem;
+    }
+
+    .preview-section {
+      display: none;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .preview-section.visible {
+      display: block;
+    }
+
+    .preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .preview-header .filename {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .preview-header .change-btn {
+      font-size: 0.85rem;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.35rem 0.75rem;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .preview-header .change-btn:hover {
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent-hover);
+    }
+
+    .video-wrapper {
+      background: #000;
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 240px;
+    }
+
+    .video-wrapper video {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+    }
+
+    .status {
+      padding: 1rem 1.25rem;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .status.visible {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .status.loading {
+      color: var(--text-muted);
+    }
+
+    .status.error {
+      color: var(--error);
+    }
+
+    .status.success {
+      color: var(--success);
+    }
+
+    .status .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-zone {
+      display: none;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .loading-zone.visible {
+      display: block;
+    }
+
+    /* Step 2 — Frame range */
+    .step2-section {
+      display: none;
+      margin-top: 2rem;
+    }
+
+    .step2-section.visible {
+      display: block;
+    }
+
+    .frame-range-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 600px) {
+      .frame-range-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .frame-preview-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .frame-preview-card .label {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .frame-preview-card .preview-box {
+      aspect-ratio: 16 / 9;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 120px;
+    }
+
+    .frame-preview-card .preview-box img {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      display: block;
+    }
+
+    .frame-preview-card .preview-box .placeholder {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .overlay-card {
+      grid-column: 1 / -1;
+    }
+
+    .overlay-box {
+      position: relative;
+    }
+
+    .overlay-box img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .overlay-box .overlay-bg {
+      z-index: 0;
+    }
+
+    .overlay-box .overlay-fg {
+      z-index: 1;
+      opacity: 0.5;
+    }
+
+    .frame-preview-card .slider-row {
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .frame-preview-card input[type="range"] {
+      flex: 1;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--border);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    .frame-preview-card input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .frame-preview-card input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+
+    .frame-preview-card input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    .frame-preview-card .frame-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--text);
+      min-width: 4ch;
+    }
+
+    .range-summary {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: rgba(88, 166, 255, 0.08);
+      border-radius: var(--radius-sm);
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .range-summary strong {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <span class="step-badge">Step 1 — Upload</span>
+    <h1>Video to Sprite Sheet</h1>
+    <p class="subtitle">Upload a video file to get started. Supports MP4, AVI, MOV, WebM.</p>
+
+    <div class="upload-zone" id="uploadZone" role="button" tabindex="0">
+      <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,.mp4,.avi,.mov,.webm">
+      <div class="icon">🎬</div>
+      <div class="hint">Drop a video file here or click to browse</div>
+      <div class="formats">MP4, AVI, MOV, WebM</div>
+    </div>
+
+    <div class="loading-zone" id="loadingZone">
+      <div class="status loading visible" id="statusLoading">
+        <span class="spinner"></span>
+        <span>Uploading…</span>
+      </div>
+    </div>
+
+    <div class="preview-section" id="previewSection">
+      <div class="preview-header">
+        <span class="filename" id="filenameDisplay">—</span>
+        <button type="button" class="change-btn" id="changeBtn">Change video</button>
+      </div>
+      <div class="video-wrapper">
+        <video id="videoPreview" controls playsinline preload="metadata"></video>
+      </div>
+      <div class="status error" id="statusError"></div>
+    </div>
+
+    <div class="step2-section" id="step2Section">
+      <span class="step-badge">Step 2 — Frame range</span>
+      <h2 style="font-size:1.25rem; margin-bottom:0.5rem;">Select frame range</h2>
+      <p class="subtitle" style="margin-bottom:1rem;">Use sliders to set the first and last frame of your sequence.</p>
+      <div class="frame-range-grid">
+        <div class="frame-preview-card">
+          <div class="label">First frame</div>
+          <div class="preview-box" id="firstFrameBox">
+            <span class="placeholder">—</span>
+          </div>
+          <div class="slider-row">
+            <input type="range" id="firstFrameSlider" min="0" max="0" value="0">
+            <span class="frame-num" id="firstFrameNum">0</span>
+          </div>
+        </div>
+        <div class="frame-preview-card">
+          <div class="label">Last frame</div>
+          <div class="preview-box" id="lastFrameBox">
+            <span class="placeholder">—</span>
+          </div>
+          <div class="slider-row">
+            <input type="range" id="lastFrameSlider" min="0" max="0" value="0">
+            <span class="frame-num" id="lastFrameNum">0</span>
+          </div>
+        </div>
+      </div>
+      <div class="frame-preview-card overlay-card">
+        <div class="label">Compare: first over last</div>
+        <div class="preview-box overlay-box" id="overlayBox">
+          <img class="overlay-bg" id="overlayBg" alt="">
+          <img class="overlay-fg" id="overlayFg" alt="">
+          <span class="placeholder" id="overlayPlaceholder">—</span>
+        </div>
+      </div>
+      <div class="range-summary" id="rangeSummary">
+        Range: frame <strong id="rangeStart">0</strong> to <strong id="rangeEnd">0</strong> — <strong id="rangeCount">0</strong> frames
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const loadingZone = document.getElementById('loadingZone');
+    const statusLoading = document.getElementById('statusLoading');
+    const previewSection = document.getElementById('previewSection');
+    const filenameDisplay = document.getElementById('filenameDisplay');
+    const videoPreview = document.getElementById('videoPreview');
+    const changeBtn = document.getElementById('changeBtn');
+    const statusError = document.getElementById('statusError');
+
+    function showUpload() {
+      uploadZone.style.display = 'block';
+      loadingZone.classList.remove('visible');
+      previewSection.classList.remove('visible');
+      statusError.classList.remove('visible');
+    }
+
+    function showLoading() {
+      uploadZone.style.display = 'none';
+      loadingZone.classList.add('visible');
+      statusLoading.classList.add('visible');
+      previewSection.classList.remove('visible');
+    }
+
+    function showPreview(filename, url, videoId) {
+      loadingZone.classList.remove('visible');
+      previewSection.classList.add('visible');
+      filenameDisplay.textContent = filename;
+      videoPreview.src = url;
+      statusError.classList.remove('visible');
+      uploadZone.style.display = 'block';
+      initStep2(videoId);
+    }
+
+    function showError(msg) {
+      loadingZone.classList.remove('visible');
+      statusLoading.classList.remove('visible');
+      uploadZone.style.display = 'block';
+      statusError.textContent = msg;
+      statusError.classList.add('visible');
+    }
+
+    async function uploadFile(file) {
+      if (!file || !file.type.startsWith('video/')) {
+        showError('Please select a valid video file.');
+        return;
+      }
+
+      showLoading();
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          showError(data.detail || `Upload failed (${res.status})`);
+          return;
+        }
+
+        const base = window.location.origin;
+        const videoUrl = data.url.startsWith('http') ? data.url : base + data.url;
+        showPreview(data.filename, videoUrl, data.id);
+      } catch (err) {
+        showError('Network error. Is the server running?');
+        console.error(err);
+      }
+    }
+
+    function onFileSelected(e) {
+      const file = e.target?.files?.[0] || e.dataTransfer?.files?.[0];
+      if (file) uploadFile(file);
+      fileInput.value = '';
+      uploadZone.classList.remove('drag-over');
+    }
+
+    uploadZone.addEventListener('click', (e) => {
+      if (e.target !== fileInput) fileInput.click();
+    });
+
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('drag-over');
+    });
+
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('drag-over');
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      onFileSelected({ target: null, dataTransfer: e.dataTransfer });
+    });
+
+    fileInput.addEventListener('change', onFileSelected);
+
+    changeBtn.addEventListener('click', () => {
+      videoPreview.pause();
+      videoPreview.src = '';
+      frameCache.forEach(url => URL.revokeObjectURL(url));
+      frameCache = [];
+      step2Section.classList.remove('visible');
+      showUpload();
+      fileInput.click();
+    });
+
+    // Step 2 — Frame range (all frames cached, instant preview on slider move)
+    const step2Section = document.getElementById('step2Section');
+    const firstFrameSlider = document.getElementById('firstFrameSlider');
+    const lastFrameSlider = document.getElementById('lastFrameSlider');
+    const firstFrameNum = document.getElementById('firstFrameNum');
+    const lastFrameNum = document.getElementById('lastFrameNum');
+    const firstFrameBox = document.getElementById('firstFrameBox');
+    const lastFrameBox = document.getElementById('lastFrameBox');
+    const rangeStart = document.getElementById('rangeStart');
+    const rangeEnd = document.getElementById('rangeEnd');
+    const rangeCount = document.getElementById('rangeCount');
+    const overlayBg = document.getElementById('overlayBg');
+    const overlayFg = document.getElementById('overlayFg');
+    const overlayPlaceholder = document.getElementById('overlayPlaceholder');
+
+    let videoId = null;
+    let frameCache = []; // blob URLs for each frame
+
+    function setPreviewFromCache(boxEl, index) {
+      if (index < 0 || index >= frameCache.length) return;
+      const placeholder = boxEl.querySelector('.placeholder');
+      let img = boxEl.querySelector('img');
+      if (placeholder) placeholder.style.display = 'none';
+      if (!img) {
+        img = document.createElement('img');
+        img.alt = 'Frame ' + index;
+        boxEl.appendChild(img);
+      }
+      img.src = frameCache[index];
+    }
+
+    function updateFirstFrame() {
+      const idx = parseInt(firstFrameSlider.value, 10);
+      firstFrameNum.textContent = idx;
+      setPreviewFromCache(firstFrameBox, idx);
+      const lastVal = parseInt(lastFrameSlider.value, 10);
+      if (idx > lastVal) {
+        lastFrameSlider.value = idx;
+        lastFrameNum.textContent = idx;
+        setPreviewFromCache(lastFrameBox, idx);
+      }
+      updateRangeSummary();
+      updateOverlay();
+    }
+
+    function updateLastFrame() {
+      const idx = parseInt(lastFrameSlider.value, 10);
+      lastFrameNum.textContent = idx;
+      setPreviewFromCache(lastFrameBox, idx);
+      const firstVal = parseInt(firstFrameSlider.value, 10);
+      if (idx < firstVal) {
+        firstFrameSlider.value = idx;
+        firstFrameNum.textContent = idx;
+        setPreviewFromCache(firstFrameBox, idx);
+      }
+      updateRangeSummary();
+      updateOverlay();
+    }
+
+    function updateRangeSummary() {
+      const first = parseInt(firstFrameSlider.value, 10);
+      const last = parseInt(lastFrameSlider.value, 10);
+      const count = Math.max(0, last - first + 1);
+      rangeStart.textContent = first;
+      rangeEnd.textContent = last;
+      rangeCount.textContent = count;
+    }
+
+    function updateOverlay() {
+      if (frameCache.length === 0) return;
+      const firstIdx = parseInt(firstFrameSlider.value, 10);
+      const lastIdx = parseInt(lastFrameSlider.value, 10);
+      if (firstIdx < 0 || firstIdx >= frameCache.length || lastIdx < 0 || lastIdx >= frameCache.length) return;
+      overlayPlaceholder.style.display = 'none';
+      overlayBg.src = frameCache[lastIdx];
+      overlayFg.src = frameCache[firstIdx];
+    }
+
+    async function initStep2(id) {
+      videoId = id;
+      step2Section.classList.add('visible');
+      const summaryEl = step2Section.querySelector('.range-summary');
+      firstFrameBox.innerHTML = '<span class="placeholder">Loading frames…</span>';
+      lastFrameBox.innerHTML = '<span class="placeholder">Loading frames…</span>';
+      try {
+        const metaRes = await fetch(`/api/video/${id}/metadata`);
+        if (!metaRes.ok) throw new Error('Failed to load metadata');
+        const meta = await metaRes.json();
+        const totalFrames = Math.max(1, meta.frame_count || 1);
+        const maxIdx = totalFrames - 1;
+
+        summaryEl.textContent = `Loading ${totalFrames} frames…`;
+        const zipRes = await fetch(`/api/video/${id}/frames`);
+        if (!zipRes.ok) throw new Error('Failed to load frames');
+        const zipBlob = await zipRes.blob();
+        const zip = await JSZip.loadAsync(zipBlob);
+        const names = Object.keys(zip.files).filter(n => n.endsWith('.png')).sort();
+        frameCache = [];
+        for (const name of names) {
+          const blob = await zip.files[name].async('blob');
+          frameCache.push(URL.createObjectURL(blob));
+        }
+        const loadedCount = frameCache.length;
+        const safeMaxIdx = Math.min(maxIdx, loadedCount - 1);
+
+        firstFrameSlider.min = 0;
+        firstFrameSlider.max = safeMaxIdx;
+        firstFrameSlider.value = 0;
+        lastFrameSlider.min = 0;
+        lastFrameSlider.max = safeMaxIdx;
+        lastFrameSlider.value = safeMaxIdx;
+        firstFrameNum.textContent = '0';
+        lastFrameNum.textContent = String(safeMaxIdx);
+        updateRangeSummary();
+
+        firstFrameBox.innerHTML = '';
+        lastFrameBox.innerHTML = '';
+        setPreviewFromCache(firstFrameBox, 0);
+        setPreviewFromCache(lastFrameBox, safeMaxIdx);
+        overlayPlaceholder.style.display = 'none';
+        overlayBg.src = frameCache[safeMaxIdx];
+        overlayFg.src = frameCache[0];
+      } catch (e) {
+        summaryEl.innerHTML = 'Could not load frames: ' + (e.message || 'Unknown error');
+        firstFrameBox.innerHTML = '<span class="placeholder">Error</span>';
+        lastFrameBox.innerHTML = '<span class="placeholder">Error</span>';
+      }
+    }
+
+    firstFrameSlider.addEventListener('input', updateFirstFrame);
+    lastFrameSlider.addEventListener('input', updateLastFrame);
+
+    uploadZone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+  </script>
+</body>
+</html>
