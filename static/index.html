@@ -474,35 +474,93 @@
       .chroma-grid { grid-template-columns: 1fr; }
     }
 
-    .chroma-picker-box {
-      cursor: crosshair;
+    .chroma-viewport {
       position: relative;
       background: #000;
       aspect-ratio: 16 / 9;
       min-height: 140px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       overflow: hidden;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
-    .chroma-picker-box canvas,
-    .chroma-preview-box canvas {
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
-      height: auto;
+    .chroma-viewport.dragging {
+      cursor: grabbing;
+    }
+
+    .chroma-picker-box.dragging {
+      cursor: grabbing;
+    }
+
+    .chroma-viewport-inner {
+      position: absolute;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .chroma-viewport-inner canvas {
       display: block;
+      vertical-align: top;
     }
 
-    .chroma-preview-box {
+    .chroma-viewport.chroma-preview-box {
       background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px;
-      aspect-ratio: 16 / 9;
-      min-height: 140px;
+    }
+
+    .chroma-viewport.chroma-preview-box.bg-black {
+      background: #000;
+    }
+
+    .chroma-viewport.chroma-preview-box.bg-white {
+      background: #fff;
+    }
+
+    .chroma-viewport.chroma-preview-box.bg-gray {
+      background: #666;
+    }
+
+    .chroma-preview-bg-options {
       display: flex;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .chroma-preview-bg-options label {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .chroma-preview-bg-options input[type="radio"] {
+      accent-color: var(--accent);
+    }
+
+    .chroma-zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .chroma-zoom-controls button {
+      padding: 0.25rem 0.6rem;
+      font-size: 0.85rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .chroma-zoom-controls button:hover {
+      background: rgba(88, 166, 255, 0.15);
+      border-color: var(--accent);
     }
 
     .chroma-controls {
@@ -652,15 +710,35 @@
       <p class="subtitle" style="margin-bottom:1rem;">Click on the first frame to pick the background color. Adjust tolerance to fine-tune removal.</p>
       <div class="chroma-grid">
         <div class="frame-preview-card">
-          <div class="label">Click to pick color</div>
-          <div class="chroma-picker-box" id="chromaPickerBox">
-            <canvas id="chromaPickerCanvas"></canvas>
+          <div class="label">Click to pick color · Wheel zoom · Drag to pan</div>
+          <div class="chroma-viewport chroma-picker-box" id="chromaPickerBox">
+            <div class="chroma-viewport-inner" id="chromaPickerViewport">
+              <canvas id="chromaPickerCanvas"></canvas>
+            </div>
+          </div>
+          <div class="chroma-zoom-controls">
+            <button type="button" id="chromaPickerZoomOut">−</button>
+            <span class="fps-value" id="chromaPickerZoomVal">100%</span>
+            <button type="button" id="chromaPickerZoomIn">+</button>
           </div>
         </div>
         <div class="frame-preview-card">
-          <div class="label">Result preview</div>
-          <div class="chroma-preview-box" id="chromaPreviewBox">
-            <canvas id="chromaPreviewCanvas"></canvas>
+          <div class="label">Result preview · Wheel zoom · Drag to pan</div>
+          <div class="chroma-viewport chroma-preview-box" id="chromaPreviewBox">
+            <div class="chroma-viewport-inner" id="chromaPreviewViewport">
+              <canvas id="chromaPreviewCanvas"></canvas>
+            </div>
+          </div>
+          <div class="chroma-zoom-controls">
+            <button type="button" id="chromaPreviewZoomOut">−</button>
+            <span class="fps-value" id="chromaPreviewZoomVal">100%</span>
+            <button type="button" id="chromaPreviewZoomIn">+</button>
+          </div>
+          <div class="chroma-preview-bg-options">
+            <label><input type="radio" name="resultPreviewBg" value="transparent" checked> Transparent</label>
+            <label><input type="radio" name="resultPreviewBg" value="black"> Black</label>
+            <label><input type="radio" name="resultPreviewBg" value="white"> White</label>
+            <label><input type="radio" name="resultPreviewBg" value="gray"> Gray</label>
           </div>
         </div>
       </div>
@@ -676,6 +754,24 @@
           <label class="looped-preview-info">Tolerance:</label>
           <input type="range" id="chromaTolerance" min="0" max="100" value="30">
           <span class="fps-value" id="chromaToleranceVal">30</span>
+        </div>
+        <div class="row" style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border)">
+          <label class="sampling-option">
+            <input type="checkbox" id="holoRemoverEnabled">
+            Holo Remover
+          </label>
+          <span class="looped-preview-info">Removes color spill (outline) from the removed background</span>
+        </div>
+        <div class="row" id="holoRemoverRow" style="display:none;align-items:center">
+          <label class="looped-preview-info">Strength:</label>
+          <input type="range" id="holoRemoverStrength" min="0" max="100" value="80">
+          <span class="fps-value" id="holoRemoverStrengthVal">80</span>
+        </div>
+        <div class="row" style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border)">
+          <label class="looped-preview-info">Max clusters:</label>
+          <input type="range" id="chromaMaxClusters" min="0" max="100" value="0">
+          <span class="fps-value" id="chromaMaxClustersVal">∞</span>
+          <span class="looped-preview-info">0 = keep all, 100 = keep top 100</span>
         </div>
       </div>
     </div>
@@ -1003,6 +1099,101 @@
       }
     }
 
+    const ZOOM_MIN = 25;
+    const ZOOM_MAX = 500;
+
+    function initViewport(viewportEl, innerEl, canvas, zoomValEl, state, onPickClick) {
+      function applyTransform() {
+        const s = state.scale / 100;
+        innerEl.style.transform = `translate(${state.offsetX}px,${state.offsetY}px) scale(${s})`;
+        zoomValEl.textContent = Math.round(state.scale) + '%';
+      }
+
+      function screenToContent(sx, sy) {
+        const rect = viewportEl.getBoundingClientRect();
+        const s = state.scale / 100;
+        return {
+          x: (sx - rect.left - state.offsetX) / s,
+          y: (sy - rect.top - state.offsetY) / s
+        };
+      }
+
+      function centerContent() {
+        const rect = viewportEl.getBoundingClientRect();
+        const s = state.scale / 100;
+        const cw = canvas.width, ch = canvas.height;
+        state.offsetX = (rect.width - cw * s) / 2;
+        state.offsetY = (rect.height - ch * s) / 2;
+        applyTransform();
+      }
+
+      function zoomAt(centerX, centerY, delta) {
+        const rect = viewportEl.getBoundingClientRect();
+        const mx = centerX - rect.left;
+        const my = centerY - rect.top;
+        const oldScale = state.scale / 100;
+        const newScale = Math.max(ZOOM_MIN / 100, Math.min(ZOOM_MAX / 100, oldScale * delta));
+        state.scale = newScale * 100;
+        state.offsetX = mx - (mx - state.offsetX) / oldScale * newScale;
+        state.offsetY = my - (my - state.offsetY) / oldScale * newScale;
+        applyTransform();
+      }
+
+      let dragStart = null;
+
+      viewportEl.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        zoomAt(e.clientX, e.clientY, delta);
+      }, { passive: false });
+
+      viewportEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        dragStart = { x: e.clientX, y: e.clientY, ox: state.offsetX, oy: state.offsetY };
+        viewportEl.classList.add('dragging');
+      });
+      viewportEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      viewportEl.addEventListener('mousemove', (e) => {
+        if (dragStart) {
+          state.offsetX = dragStart.ox + (e.clientX - dragStart.x);
+          state.offsetY = dragStart.oy + (e.clientY - dragStart.y);
+          applyTransform();
+        }
+      });
+
+      const onMouseUp = (e) => {
+        if (e.button !== 0) return;
+        if (dragStart && onPickClick) {
+          const dx = e.clientX - dragStart.x, dy = e.clientY - dragStart.y;
+          if (dx * dx + dy * dy < 16) {
+            const p = screenToContent(dragStart.x, dragStart.y);
+            onPickClick(Math.floor(p.x), Math.floor(p.y));
+          }
+        }
+        dragStart = null;
+        viewportEl.classList.remove('dragging');
+      };
+
+      viewportEl.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('mousemove', (e) => {
+        if (dragStart) {
+          state.offsetX = dragStart.ox + (e.clientX - dragStart.x);
+          state.offsetY = dragStart.oy + (e.clientY - dragStart.y);
+          applyTransform();
+        }
+      });
+
+      applyTransform();
+      return { applyTransform, centerContent, zoomAt, screenToContent, state };
+    }
+
+    const pickerViewportState = { scale: 100, offsetX: 0, offsetY: 0 };
+    const previewViewportState = { scale: 100, offsetX: 0, offsetY: 0 };
+    let pickerViewport, previewViewport;
+
     function loadChromaFrame() {
       const indices = getSampledIndices();
       if (indices.length === 0 || frameCache.length === 0) return;
@@ -1023,12 +1214,89 @@
         pickedColorSwatch.style.backgroundColor = '';
         pickedColorText.textContent = '— click to pick';
         applyChromaPreview();
+        pickerViewportState.scale = 100;
+        pickerViewportState.offsetX = 0;
+        pickerViewportState.offsetY = 0;
+        previewViewportState.scale = 100;
+        previewViewportState.offsetX = 0;
+        previewViewportState.offsetY = 0;
+        if (pickerViewport) pickerViewport.centerContent();
+        if (previewViewport) previewViewport.centerContent();
       };
       img.src = frameCache[firstIdx];
     }
 
     function rgbToHex(r, g, b) {
       return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    function applyClusterFilter(data, width, height, maxClusters) {
+      if (maxClusters <= 0) return;
+      const len = width * height;
+      const clusterId = new Int32Array(len);
+      clusterId.fill(-1);
+      for (let i = 0; i < len; i++) {
+        if (data[i * 4 + 3] > 0) clusterId[i] = 0;
+      }
+      const clusters = [];
+      let nextId = 1;
+      const stack = [];
+      const dx = [-1, 0, 1, -1, 1, -1, 0, 1];
+      const dy = [-1, -1, -1, 0, 0, 1, 1, 1];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          if (clusterId[idx] !== 0) continue;
+          let size = 0;
+          stack.length = 0;
+          stack.push([x, y]);
+          clusterId[idx] = nextId;
+          size++;
+          while (stack.length > 0) {
+            const [cx, cy] = stack.pop();
+            for (let d = 0; d < 8; d++) {
+              const nx = cx + dx[d], ny = cy + dy[d];
+              if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+              const nidx = ny * width + nx;
+              if (clusterId[nidx] === 0) {
+                clusterId[nidx] = nextId;
+                size++;
+                stack.push([nx, ny]);
+              }
+            }
+          }
+          clusters.push({ id: nextId, size });
+          nextId++;
+        }
+      }
+      clusters.sort((a, b) => b.size - a.size);
+      const keepIds = new Set(clusters.slice(0, maxClusters).map(c => c.id));
+      for (let i = 0; i < len; i++) {
+        const cid = clusterId[i];
+        if (cid > 0 && !keepIds.has(cid)) data[i * 4 + 3] = 0;
+      }
+    }
+
+    function applyDespill(data, keyR, keyG, keyB, strength) {
+      const s = strength / 100;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        let r = data[i], g = data[i + 1], b = data[i + 2];
+        let spill = 0;
+        if (keyG >= keyR && keyG >= keyB) {
+          spill = Math.max(0, g - Math.max(r, b));
+          g = Math.round(g - spill * s);
+        } else if (keyB >= keyR && keyB >= keyG) {
+          spill = Math.max(0, b - Math.max(r, g));
+          b = Math.round(b - spill * s);
+        } else if (keyR >= keyG && keyR >= keyB) {
+          spill = Math.max(0, r - Math.max(g, b));
+          r = Math.round(r - spill * s);
+        }
+        data[i] = Math.max(0, Math.min(255, r));
+        data[i + 1] = Math.max(0, Math.min(255, g));
+        data[i + 2] = Math.max(0, Math.min(255, b));
+      }
     }
 
     function applyChromaPreview() {
@@ -1046,16 +1314,22 @@
         const dist = Math.sqrt(dr * dr + dg * dg + db * db);
         if (dist <= threshold) data[i + 3] = 0;
       }
+      const holoEnabled = document.getElementById('holoRemoverEnabled').checked;
+      if (holoEnabled) {
+        const holoStrength = parseInt(document.getElementById('holoRemoverStrength').value, 10) || 80;
+        applyDespill(data, kr, kg, kb, holoStrength);
+      }
+      const maxClusters = parseInt(document.getElementById('chromaMaxClusters').value, 10) || 0;
+      if (maxClusters > 0) {
+        applyClusterFilter(data, chromaPreviewCanvas.width, chromaPreviewCanvas.height, maxClusters);
+      }
       ctx.putImageData(imgData, 0, 0);
     }
 
-    function onChromaPickerClick(e) {
+    function onChromaPick(x, y) {
       if (!chromaSourceImg || frameCache.length === 0) return;
-      const rect = chromaPickerCanvas.getBoundingClientRect();
-      const scaleX = chromaPickerCanvas.width / rect.width;
-      const scaleY = chromaPickerCanvas.height / rect.height;
-      const x = Math.floor((e.clientX - rect.left) * scaleX);
-      const y = Math.floor((e.clientY - rect.top) * scaleY);
+      const w = chromaPickerCanvas.width, h = chromaPickerCanvas.height;
+      if (x < 0 || x >= w || y < 0 || y >= h) return;
       const ctx = chromaPickerCanvas.getContext('2d', { willReadFrequently: true });
       const pixel = ctx.getImageData(x, y, 1, 1).data;
       chromaPickedColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
@@ -1073,12 +1347,70 @@
     function initStep3() {
       step3Section.classList.add('visible');
       chromaToleranceVal.textContent = chromaToleranceInput.value;
+      document.getElementById('chromaMaxClustersVal').textContent = 
+        parseInt(document.getElementById('chromaMaxClusters').value, 10) === 0 ? '∞' : document.getElementById('chromaMaxClusters').value;
       loadChromaFrame();
     }
 
-    chromaPickerBox.addEventListener('click', onChromaPickerClick);
+    const chromaPickerZoomVal = document.getElementById('chromaPickerZoomVal');
+    const chromaPreviewZoomVal = document.getElementById('chromaPreviewZoomVal');
+
+    pickerViewport = initViewport(
+      chromaPickerBox,
+      document.getElementById('chromaPickerViewport'),
+      chromaPickerCanvas,
+      chromaPickerZoomVal,
+      pickerViewportState,
+      onChromaPick
+    );
+    previewViewport = initViewport(
+      chromaPreviewBox,
+      document.getElementById('chromaPreviewViewport'),
+      chromaPreviewCanvas,
+      chromaPreviewZoomVal,
+      previewViewportState,
+      null
+    );
+
+    document.getElementById('chromaPickerZoomIn').addEventListener('click', () => {
+      const rect = chromaPickerBox.getBoundingClientRect();
+      pickerViewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.25);
+    });
+    document.getElementById('chromaPickerZoomOut').addEventListener('click', () => {
+      const rect = chromaPickerBox.getBoundingClientRect();
+      pickerViewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 0.8);
+    });
+    document.getElementById('chromaPreviewZoomIn').addEventListener('click', () => {
+      const rect = chromaPreviewBox.getBoundingClientRect();
+      previewViewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.25);
+    });
+    document.getElementById('chromaPreviewZoomOut').addEventListener('click', () => {
+      const rect = chromaPreviewBox.getBoundingClientRect();
+      previewViewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 0.8);
+    });
+    document.querySelectorAll('input[name="resultPreviewBg"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        chromaPreviewBox.classList.remove('bg-black', 'bg-white', 'bg-gray');
+        if (e.target.value !== 'transparent') {
+          chromaPreviewBox.classList.add('bg-' + e.target.value);
+        }
+      });
+    });
     chromaToleranceInput.addEventListener('input', () => {
       chromaToleranceVal.textContent = chromaToleranceInput.value;
+      applyChromaPreview();
+    });
+    document.getElementById('holoRemoverEnabled').addEventListener('change', (e) => {
+      document.getElementById('holoRemoverRow').style.display = e.target.checked ? 'flex' : 'none';
+      applyChromaPreview();
+    });
+    document.getElementById('holoRemoverStrength').addEventListener('input', (e) => {
+      document.getElementById('holoRemoverStrengthVal').textContent = e.target.value;
+      applyChromaPreview();
+    });
+    document.getElementById('chromaMaxClusters').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      document.getElementById('chromaMaxClustersVal').textContent = v === 0 ? '∞' : v;
       applyChromaPreview();
     });
 
