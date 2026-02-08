@@ -626,6 +626,53 @@
       background: rgba(88, 166, 255, 0.15);
       border-color: var(--accent);
     }
+
+    /* Step 5 — Looping (optional) */
+    .step5-section {
+      display: none;
+      margin-top: 2rem;
+    }
+
+    .step5-section.visible {
+      display: block;
+    }
+
+    .step5-content {
+      display: none;
+      margin-top: 1rem;
+    }
+
+    .step5-content.visible {
+      display: block;
+    }
+
+    .step5-overlay-box {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      min-height: 120px;
+      background: repeating-conic-gradient(#333 0% 25%, #222 0% 50%) 50% / 16px 16px;
+    }
+
+    .step5-overlay-box img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .step5-overlay-box .overlay-bg { z-index: 0; }
+    .step5-overlay-box #step5OverlayMid { z-index: 1; opacity: 0.5; }
+    .step5-overlay-box .overlay-fg { z-index: 2; opacity: 0.5; }
+
+    /* Step 6 — Export Sprite Sheet */
+    .step6-section {
+      display: none;
+      margin-top: 2rem;
+    }
+    .step6-section.visible {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -726,6 +773,7 @@
       <div class="frame-preview-card looped-preview-card">
         <div class="label">Looped preview</div>
         <div class="preview-box" id="loopedPreviewBox">
+          <canvas id="loopedPreviewCanvas" style="max-width:100%;max-height:100%;width:auto;height:auto;display:none;"></canvas>
           <img id="loopedPreviewImg" alt="" style="max-width:100%;max-height:100%;width:auto;height:auto;display:block;">
           <span class="placeholder" id="loopedPreviewPlaceholder">—</span>
         </div>
@@ -840,6 +888,93 @@
           <label><input type="radio" name="step4PreviewBg" value="black"> Black</label>
           <label><input type="radio" name="step4PreviewBg" value="white"> White</label>
           <label><input type="radio" name="step4PreviewBg" value="gray"> Gray</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="step5-section" id="step5Section">
+      <span class="step-badge">Step 5 — Looping (optional)</span>
+      <h2 style="font-size:1.25rem; margin-bottom:0.5rem;">Generate intermediate frames</h2>
+      <p class="subtitle" style="margin-bottom:1rem;">Create smooth transitions between first and last frame for seamless looping.</p>
+      <div class="row" style="margin-bottom:1rem">
+        <label class="sampling-option">
+          <input type="checkbox" id="step5GenerateEnabled">
+          Need generate frame between first and end
+        </label>
+      </div>
+      <div class="step5-content" id="step5Content">
+        <div class="row" style="margin-bottom:1rem">
+          <label class="looped-preview-info">Number of frames:</label>
+          <input type="number" id="step5FrameCount" min="1" max="20" value="3">
+          <button type="button" id="step5GenerateBtn" class="change-btn">Generate</button>
+        </div>
+        <div class="chroma-grid" style="margin-top:1rem">
+          <div class="frame-preview-card">
+            <div class="label">Generated frames · Wheel zoom · Drag to pan</div>
+            <div class="processed-frames-nav">
+              <button type="button" id="loopedFramePrev">←</button>
+              <span class="fps-value" id="loopedFrameInfo">1 / 1</span>
+              <button type="button" id="loopedFrameNext">→</button>
+            </div>
+            <div class="chroma-viewport chroma-preview-box" id="step5Viewport">
+              <div class="chroma-viewport-inner" id="step5ViewportInner">
+                <img id="step5FrameImg" alt="" style="display:block;width:100%;height:100%;object-fit:contain;">
+              </div>
+            </div>
+            <div class="chroma-zoom-controls">
+              <button type="button" id="step5ZoomOut">−</button>
+              <span class="fps-value" id="step5ZoomVal">100%</span>
+              <button type="button" id="step5ZoomIn">+</button>
+            </div>
+            <div class="chroma-preview-bg-options">
+              <label><input type="radio" name="step5PreviewBg" value="transparent" checked> Transparent</label>
+              <label><input type="radio" name="step5PreviewBg" value="black"> Black</label>
+              <label><input type="radio" name="step5PreviewBg" value="white"> White</label>
+              <label><input type="radio" name="step5PreviewBg" value="gray"> Gray</label>
+            </div>
+          </div>
+          <div class="frame-preview-card overlay-card">
+            <div class="label">Overlay: first + intermediate + last</div>
+            <div class="preview-box overlay-box step5-overlay-box">
+              <img class="overlay-bg" id="step5OverlayBg" alt="">
+              <img class="overlay-fg" id="step5OverlayMid" alt="">
+              <img class="overlay-fg" id="step5OverlayFg" alt="">
+            </div>
+          </div>
+        </div>
+        <div class="frame-preview-card" style="margin-top:1.5rem" id="step5PlaybackCard">
+          <div class="label">Loop transition preview · (last−N)…last → generated → first…(first+N)</div>
+          <div class="row" style="padding:1rem; align-items:center; flex-wrap:wrap; gap:1rem; border-bottom:1px solid var(--border)">
+            <label class="looped-preview-info">Context frames N:</label>
+            <input type="number" id="step5ContextN" min="1" max="50" value="5" style="width:4rem; padding:0.35rem 0.5rem; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:'JetBrains Mono',monospace;">
+            <label class="looped-preview-info">FPS:</label>
+            <input type="number" id="step5PlaybackFps" min="5" max="60" value="24" style="width:4rem; padding:0.35rem 0.5rem; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:'JetBrains Mono',monospace;">
+            <button type="button" id="step5PlayBtn" class="change-btn">Play</button>
+            <span class="looped-preview-info" id="step5PlaybackInfo">—</span>
+          </div>
+          <div class="preview-box" id="step5PlaybackBox" style="min-height:160px">
+            <canvas id="step5PlaybackCanvas" style="max-width:100%;max-height:100%;width:auto;height:auto;display:none;"></canvas>
+            <img id="step5PlaybackImg" alt="" style="max-width:100%;max-height:100%;width:auto;height:auto;display:block;">
+            <span class="placeholder" id="step5PlaybackPlaceholder">Generate frames, then set N and press Play</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step6-section" id="step6Section">
+      <span class="step-badge">Step 6 — Export Sprite Sheet</span>
+      <h2 style="font-size:1.25rem; margin-bottom:0.5rem;">Save PNG sprite sheet</h2>
+      <p class="subtitle" style="margin-bottom:1rem;">Export all frames as a single sprite sheet (power-of-2 dimensions).</p>
+      <div class="frame-preview-card">
+        <div class="row" style="align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1rem">
+          <label class="looped-preview-info">Frame size (one side):</label>
+          <input type="range" id="step6FrameSize" min="16" max="512" value="64" step="1">
+          <span class="fps-value" id="step6FrameSizeVal">64</span>
+          <span class="looped-preview-info" id="step6FrameDims">— × —</span>
+        </div>
+        <div class="row">
+          <button type="button" id="step6ExportBtn" class="change-btn">Export to sprite sheet</button>
+          <span class="looped-preview-info" id="step6ExportStatus"></span>
         </div>
       </div>
     </div>
@@ -961,6 +1096,14 @@
       step2Section.classList.remove('visible');
       step3Section.classList.remove('visible');
       step4Section.classList.remove('visible');
+      step5Section.classList.remove('visible');
+      step6Section.classList.remove('visible');
+      if (step5PlaybackInterval) {
+        clearInterval(step5PlaybackInterval);
+        step5PlaybackInterval = null;
+      }
+      (loopedFrameCache || []).forEach(url => URL.revokeObjectURL(url));
+      loopedFrameCache = [];
       showUpload();
       fileInput.click();
     });
@@ -1083,30 +1226,59 @@
       return indices;
     }
 
-    function startLoopedPreview() {
+    let loopedPreviewPreloaded = [];
+    let loopedPreviewEpoch = 0;
+
+    async function startLoopedPreview() {
       if (loopedPreviewInterval) clearInterval(loopedPreviewInterval);
       const indices = getSampledIndices();
+      const canvas = document.getElementById('loopedPreviewCanvas');
       const loopedImg = document.getElementById('loopedPreviewImg');
       const loopedPlaceholder = document.getElementById('loopedPreviewPlaceholder');
       const loopedInfo = document.getElementById('loopedPreviewInfo');
       if (indices.length === 0 || frameCache.length === 0) {
         loopedPlaceholder.textContent = '—';
         loopedPlaceholder.style.display = 'inline';
-        loopedImg.style.display = 'none';
+        loopedImg.style.display = 'block';
+        canvas.style.display = 'none';
+        loopedImg.src = '';
         loopedInfo.textContent = '0 frames';
         return;
       }
+      const epoch = ++loopedPreviewEpoch;
+      loopedPlaceholder.textContent = 'Preloading…';
+      loopedPlaceholder.style.display = 'inline';
+      loopedImg.style.display = 'none';
+      canvas.style.display = 'none';
+      const preloaded = [];
+      for (let k = 0; k < indices.length; k++) {
+        if (epoch !== loopedPreviewEpoch) return;
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = frameCache[indices[k]];
+        });
+        if (epoch !== loopedPreviewEpoch) return;
+        preloaded.push(img);
+      }
+      loopedPreviewPreloaded = preloaded;
       loopedPlaceholder.style.display = 'none';
-      loopedImg.style.display = 'block';
-      loopedImg.src = frameCache[indices[0]];
+      canvas.style.display = 'block';
+      canvas.width = preloaded[0].naturalWidth;
+      canvas.height = preloaded[0].naturalHeight;
+      const ctx = canvas.getContext('2d');
+      let idx = 0;
+      const tick = () => {
+        if (loopedPreviewPreloaded.length === 0) return;
+        ctx.drawImage(loopedPreviewPreloaded[idx], 0, 0);
+        idx = (idx + 1) % loopedPreviewPreloaded.length;
+      };
+      tick();
       loopedInfo.textContent = indices.length + ' frames';
       const fps = parseInt(document.getElementById('loopedPreviewFps').value, 10) || 24;
       const msPerFrame = 1000 / Math.max(1, fps);
-      let idx = 0;
-      loopedPreviewInterval = setInterval(() => {
-        idx = (idx + 1) % indices.length;
-        loopedImg.src = frameCache[indices[idx]];
-      }, msPerFrame);
+      loopedPreviewInterval = setInterval(tick, msPerFrame);
     }
 
     function updateLoopedPreview() {
@@ -1416,10 +1588,13 @@
     }
 
     const step4Section = document.getElementById('step4Section');
+    const step6Section = document.getElementById('step6Section');
 
     function initStep3() {
       step3Section.classList.add('visible');
       step4Section.classList.add('visible');
+      step5Section.classList.add('visible');
+      step6Section.classList.add('visible');
       chromaToleranceVal.textContent = chromaToleranceInput.value;
       document.getElementById('chromaMaxClustersVal').textContent = 
         parseInt(document.getElementById('chromaMaxClusters').value, 10) === 0 ? '∞' : document.getElementById('chromaMaxClusters').value;
@@ -1489,6 +1664,7 @@
       statusEl.textContent = `Done. ${processedFrameCache.length} frames processed.`;
       btn.disabled = false;
       document.getElementById('step4BrowserCard').style.display = 'block';
+      updateStep6FrameDims();
       initStep4Viewport();
       showProcessedFrame(0);
     }
@@ -1522,6 +1698,277 @@
       img.src = processedFrameCache[processedFrameIdx];
       document.getElementById('processedFrameInfo').textContent = `${processedFrameIdx + 1} / ${processedFrameCache.length}`;
       if (step4Viewport) step4Viewport.centerContent();
+    }
+
+    let loopedFrameCache = [];
+    let loopedFrameIdx = 0;
+    let step5Viewport = null;
+    const step5ViewportEl = document.getElementById('step5Viewport');
+    const step5ViewportInner = document.getElementById('step5ViewportInner');
+    const step5ViewportState = { scale: 100, offsetX: 0, offsetY: 0 };
+    const step5Section = document.getElementById('step5Section');
+
+    async function loadImageData(url) {
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      return ctx.getImageData(0, 0, canvas.width, canvas.height);
+    }
+
+    async function generateLoopFrames() {
+      if (processedFrameCache.length < 2) {
+        document.getElementById('processStatus').textContent = 'Need at least 2 processed frames.';
+        return;
+      }
+      const btn = document.getElementById('step5GenerateBtn');
+      btn.disabled = true;
+      const statusEl = document.getElementById('processStatus');
+      try {
+        statusEl.textContent = 'Computing optical flow…';
+        const n = Math.max(1, Math.min(20, parseInt(document.getElementById('step5FrameCount').value, 10) || 3));
+        loopedFrameCache.forEach(url => URL.revokeObjectURL(url));
+        loopedFrameCache = [];
+
+        const blobFirst = await fetch(processedFrameCache[0]).then(r => r.blob());
+        const blobLast = await fetch(processedFrameCache[processedFrameCache.length - 1]).then(r => r.blob());
+        const form = new FormData();
+        form.append('first', blobFirst, 'first.png');
+        form.append('last', blobLast, 'last.png');
+        const tol = parseInt(document.getElementById('chromaTolerance').value, 10) || 30;
+        const holoOn = document.getElementById('holoRemoverEnabled').checked;
+        const holoStr = parseInt(document.getElementById('holoRemoverStrength').value, 10) || 80;
+        const maxClust = parseInt(document.getElementById('chromaMaxClusters').value, 10) || 0;
+        const qs = new URLSearchParams({
+          num_frames: String(n),
+          chroma_tolerance: String(tol),
+          chroma_holo_enabled: String(holoOn),
+          chroma_holo_strength: String(holoStr),
+          chroma_max_clusters: String(maxClust),
+        });
+        const res = await fetch(`/api/interpolate-frames?${qs}`, {
+          method: 'POST',
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Server error ${res.status}`);
+        }
+        const zipBlob = await res.blob();
+        const zip = await JSZip.loadAsync(zipBlob);
+        const names = ['first.png'];
+        for (let i = 1; i <= n; i++) names.push(`interp_${String(i).padStart(3, '0')}.png`);
+        names.push('last.png');
+        for (const name of names) {
+          const entry = zip.files[name];
+          if (!entry) continue;
+          const blob = await entry.async('blob');
+          loopedFrameCache.push(URL.createObjectURL(blob));
+        }
+
+        loopedFrameIdx = 0;
+        initStep5Viewport();
+        showLoopedFrame(0);
+        const midIdx = Math.floor(loopedFrameCache.length / 2);
+        document.getElementById('step5OverlayBg').src = loopedFrameCache[loopedFrameCache.length - 1];
+        document.getElementById('step5OverlayMid').src = loopedFrameCache[midIdx];
+        document.getElementById('step5OverlayFg').src = loopedFrameCache[0];
+        statusEl.textContent = '';
+        updateStep6FrameDims();
+      } catch (e) {
+        statusEl.textContent = 'Error: ' + (e.message || 'Failed to generate frames');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function initStep5Viewport() {
+      if (step5Viewport) return;
+      const dimCanvas = document.createElement('canvas');
+      dimCanvas.width = chromaPickerCanvas.width;
+      dimCanvas.height = chromaPickerCanvas.height;
+      step5ViewportInner.style.width = dimCanvas.width + 'px';
+      step5ViewportInner.style.height = dimCanvas.height + 'px';
+      step5Viewport = initViewport(
+        step5ViewportEl,
+        step5ViewportInner,
+        dimCanvas,
+        document.getElementById('step5ZoomVal'),
+        step5ViewportState,
+        null
+      );
+    }
+
+    function showLoopedFrame(idx) {
+      if (loopedFrameCache.length === 0) return;
+      loopedFrameIdx = ((idx % loopedFrameCache.length) + loopedFrameCache.length) % loopedFrameCache.length;
+      document.getElementById('step5FrameImg').src = loopedFrameCache[loopedFrameIdx];
+      document.getElementById('loopedFrameInfo').textContent = `${loopedFrameIdx + 1} / ${loopedFrameCache.length}`;
+      if (step5Viewport) step5Viewport.centerContent();
+    }
+
+    let step5PlaybackInterval = null;
+    let step5PlaybackSequence = [];
+    let step5PlaybackPreloaded = [];
+    let step5PlaybackIdx = 0;
+
+    function buildStep5PlaybackSequence() {
+      const seq = [];
+      const total = processedFrameCache.length;
+      if (total === 0) return seq;
+      const lastIdx = total - 1;
+      const N = Math.max(1, Math.min(50, parseInt(document.getElementById('step5ContextN').value, 10) || 5));
+      const startIdx = Math.max(0, lastIdx - N);
+      for (let i = startIdx; i <= lastIdx; i++) seq.push(processedFrameCache[i]);
+      if (loopedFrameCache.length > 2) {
+        for (let i = loopedFrameCache.length - 2; i >= 1; i--) seq.push(loopedFrameCache[i]);
+      }
+      const endIdx = Math.min(N, lastIdx);
+      for (let i = 0; i <= endIdx; i++) seq.push(processedFrameCache[i]);
+      return seq;
+    }
+
+    function step5PlaybackTick() {
+      if (step5PlaybackPreloaded.length === 0) return;
+      const canvas = document.getElementById('step5PlaybackCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const idx = step5PlaybackIdx % step5PlaybackPreloaded.length;
+      ctx.drawImage(step5PlaybackPreloaded[idx], 0, 0);
+      document.getElementById('step5PlaybackInfo').textContent = `${idx + 1} / ${step5PlaybackPreloaded.length}`;
+      step5PlaybackIdx = (step5PlaybackIdx + 1) % step5PlaybackPreloaded.length;
+    }
+
+    function step5StopPlayback() {
+      if (step5PlaybackInterval) {
+        clearInterval(step5PlaybackInterval);
+        step5PlaybackInterval = null;
+      }
+      document.getElementById('step5PlayBtn').textContent = 'Play';
+    }
+
+    async function step5StartPlayback() {
+      const seq = buildStep5PlaybackSequence();
+      if (seq.length === 0) {
+        document.getElementById('step5PlaybackInfo').textContent = 'Process frames and generate first.';
+        return;
+      }
+      document.getElementById('step5PlaybackInfo').textContent = 'Preloading…';
+      step5PlaybackPreloaded = [];
+      for (const url of seq) {
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = url;
+        });
+        step5PlaybackPreloaded.push(img);
+      }
+      const canvas = document.getElementById('step5PlaybackCanvas');
+      const ph = document.getElementById('step5PlaybackPlaceholder');
+      const imgEl = document.getElementById('step5PlaybackImg');
+      ph.style.display = 'none';
+      imgEl.style.display = 'none';
+      canvas.style.display = 'block';
+      canvas.width = step5PlaybackPreloaded[0].naturalWidth;
+      canvas.height = step5PlaybackPreloaded[0].naturalHeight;
+      step5PlaybackIdx = 0;
+      const fps = Math.max(5, Math.min(60, parseInt(document.getElementById('step5PlaybackFps').value, 10) || 24));
+      step5PlaybackInterval = setInterval(step5PlaybackTick, 1000 / fps);
+      step5PlaybackTick();
+      document.getElementById('step5PlayBtn').textContent = 'Stop';
+    }
+
+    let step6SourceAspect = 1;
+    function getSpritesheetFrames() {
+      const base = [...processedFrameCache];
+      if (loopedFrameCache.length > 2) {
+        for (let i = loopedFrameCache.length - 2; i >= 1; i--) base.push(loopedFrameCache[i]);
+      }
+      return base;
+    }
+    function updateStep6FrameDims() {
+      const frames = getSpritesheetFrames();
+      const size = parseInt(document.getElementById('step6FrameSize').value, 10) || 64;
+      document.getElementById('step6FrameSizeVal').textContent = size;
+      if (frames.length === 0) {
+        document.getElementById('step6FrameDims').textContent = '— × —';
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        step6SourceAspect = img.naturalWidth / img.naturalHeight;
+        const w = Math.round(size);
+        const h = Math.round(size / step6SourceAspect);
+        document.getElementById('step6FrameDims').textContent = `${w} × ${h}`;
+      };
+      img.onerror = () => { document.getElementById('step6FrameDims').textContent = '— × —'; };
+      img.src = frames[0];
+    }
+
+    function nextPowerOf2(n) {
+      let p = 1;
+      while (p < n) p *= 2;
+      return p;
+    }
+
+    async function exportSpritesheet() {
+      const frames = getSpritesheetFrames();
+      const statusEl = document.getElementById('step6ExportStatus');
+      if (frames.length === 0) {
+        statusEl.textContent = 'No frames. Process frames or generate loop first.';
+        return;
+      }
+      statusEl.textContent = 'Building…';
+      const size = parseInt(document.getElementById('step6FrameSize').value, 10) || 64;
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = frames[0];
+      });
+      const origW = img.naturalWidth, origH = img.naturalHeight;
+      const aspect = origW / origH;
+      const frameW = Math.round(size);
+      const frameH = Math.round(size / aspect);
+      const n = frames.length;
+      const cols = Math.ceil(Math.sqrt(n));
+      const rows = Math.ceil(n / cols);
+      const contentW = cols * frameW;
+      const contentH = rows * frameH;
+      const sheetW = nextPowerOf2(contentW);
+      const sheetH = nextPowerOf2(contentH);
+      const canvas = document.createElement('canvas');
+      canvas.width = sheetW;
+      canvas.height = sheetH;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, sheetW, sheetH);
+      for (let i = 0; i < frames.length; i++) {
+        const col = i % cols, row = Math.floor(i / cols);
+        const x = col * frameW, y = row * frameH;
+        const fimg = new Image();
+        await new Promise((resolve, reject) => {
+          fimg.onload = resolve;
+          fimg.onerror = reject;
+          fimg.src = frames[i];
+        });
+        ctx.drawImage(fimg, 0, 0, origW, origH, x, y, frameW, frameH);
+      }
+      canvas.toBlob((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'spritesheet.png';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        statusEl.textContent = `Saved ${sheetW}×${sheetH} PNG.`;
+      }, 'image/png');
     }
 
     const chromaPickerZoomVal = document.getElementById('chromaPickerZoomVal');
@@ -1604,6 +2051,39 @@
         if (e.target.value !== 'transparent') step4ViewportEl.classList.add('bg-' + e.target.value);
       });
     });
+
+    document.getElementById('step5GenerateEnabled').addEventListener('change', (e) => {
+      document.getElementById('step5Content').classList.toggle('visible', e.target.checked);
+      if (!e.target.checked) {
+        loopedFrameCache.forEach(url => URL.revokeObjectURL(url));
+        loopedFrameCache = [];
+      }
+    });
+    document.getElementById('step5GenerateBtn').addEventListener('click', generateLoopFrames);
+    document.getElementById('step5PlayBtn').addEventListener('click', () => {
+      if (step5PlaybackInterval) step5StopPlayback();
+      else step5StartPlayback();
+    });
+    document.getElementById('loopedFramePrev').addEventListener('click', () => showLoopedFrame(loopedFrameIdx - 1));
+    document.getElementById('loopedFrameNext').addEventListener('click', () => showLoopedFrame(loopedFrameIdx + 1));
+    document.getElementById('step5ZoomIn').addEventListener('click', () => {
+      if (!step5Viewport) return;
+      const rect = step5ViewportEl.getBoundingClientRect();
+      step5Viewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.25);
+    });
+    document.getElementById('step5ZoomOut').addEventListener('click', () => {
+      if (!step5Viewport) return;
+      const rect = step5ViewportEl.getBoundingClientRect();
+      step5Viewport.zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 0.8);
+    });
+    document.querySelectorAll('input[name="step5PreviewBg"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        step5ViewportEl.classList.remove('bg-black', 'bg-white', 'bg-gray');
+        if (e.target.value !== 'transparent') step5ViewportEl.classList.add('bg-' + e.target.value);
+      });
+    });
+    document.getElementById('step6FrameSize').addEventListener('input', updateStep6FrameDims);
+    document.getElementById('step6ExportBtn').addEventListener('click', exportSpritesheet);
 
     firstFrameSlider.addEventListener('input', updateFirstFrame);
     lastFrameSlider.addEventListener('input', updateLastFrame);
